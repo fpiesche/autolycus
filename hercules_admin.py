@@ -31,16 +31,16 @@ class HerculesAdmin(object):
                             choices=['info', 'start', 'stop', 'restart',
                                      'setup_all', 'setup_database', 'setup_interserver'],
                             help=('The action to perform on the servers.\n',
-                                    '\tinfo: Output version information and exit.\n',
-                                    '\tstart: Start the game servers.\n',
-                                    '\tstop: Stop the game servers.\n',
-                                    '\trestart: Stop and restart the servers as needed.\n',
-                                    '\tsetup_all: Set up the server configuration.\n',
-                                    '\tsetup_database: Set up the database server configuration.\n',
-                                    '\tsetup_interserver: Set up the inter-server configuration.\n',
-                                    '\tsql_upgrades: Run any SQL upgrades required.\n',
-                                    '\tfirst_run: Setup database and interserver settings, run SQL upgades, and start server.\n',
-                            ))
+                                  '\tinfo: Output version information and exit.\n',
+                                  '\tstart: Start the game servers.\n',
+                                  '\tstop: Stop the game servers.\n',
+                                  '\trestart: Stop and restart the servers as needed.\n',
+                                  '\tsetup_all: Set up the server configuration.\n',
+                                  '\tsetup_database: Set up the database server configuration.\n',
+                                  '\tsetup_interserver: Set up the inter-server configuration.\n',
+                                  '\tsql_upgrades: Run any SQL upgrades required.\n',
+                                  '\tfirst_run: Setup database and inter-server config, run SQL upgrades, and start server.\n',
+                                  ))
 
         parser.add_argument('-p', '--hercules_path',
                             default=os.path.abspath(os.path.dirname(__file__)),
@@ -85,7 +85,7 @@ class HerculesAdmin(object):
                 self.logger.warning('Failed to find entry %s in %s! Data will be empty.'
                                     % (info, self.version_info_file))
                 continue
-        
+
         return version_info
 
     def _server_pid(self, server):
@@ -99,13 +99,13 @@ class HerculesAdmin(object):
         pid_file_path = os.path.join(self.hercules_path, '%s.pid' % server)
         if os.path.exists(pid_file_path):
             with open(pid_file_path, 'r') as pidfile:
-                    return int(pidfile.read())
+                return int(pidfile.read())
         else:
             return None
 
     def _read_config(self):
         """Read the current database and inter-server configuration.
-        
+
         This will use the information in the server .conf files by default, but can be
         overridden using environment variables."""
         raise NotImplementedError
@@ -162,7 +162,7 @@ class HerculesAdmin(object):
                                  % server)
                 return ('orphaned', matching_processes)
             elif len(mathing_processes) == 1:
-                return ('orphaned', matching_processes[0])    
+                return ('orphaned', matching_processes[0])
             else:
                 return ('stopped', None)
 
@@ -194,7 +194,7 @@ class HerculesAdmin(object):
 
         Args:
             server (str): Which of the servers to kill.
-        """        
+        """
         pid = self._server_pid(server)
         if psutil.pid_exists(pid):
             proc = psutil.Process(pid)
@@ -206,7 +206,7 @@ class HerculesAdmin(object):
                 proc.kill()
 
     def info(self):
-        """Print info on the Hercules server."""        
+        """Print info on the Hercules server."""
         self.logger.info('Hercules %s git version %s' %
                          (self.config['version_info']['arch'],
                           self.config['version_info']['git_version']))
@@ -217,7 +217,7 @@ class HerculesAdmin(object):
         self.logger.info('Build date %s' %
                          self.config['version_info']['build_date'])
         for server in self.servers:
-            self.logger.info('%s status: %s (pid: %s)' % (server, 
+            self.logger.info('%s status: %s (pid: %s)' % (server,
                                                           self._get_status(server),
                                                           self._server_pid(server)))
 
@@ -265,7 +265,7 @@ class HerculesAdmin(object):
         """Restart the servers."""
         self.stop()
         self.start()
-    
+
     def sql_upgrades(self):
         """Determine whether any SQL upgrades need to be run and do so if appropriate."""
         raise NotImplementedError
