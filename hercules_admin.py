@@ -19,7 +19,6 @@ class HerculesAdmin(object):
 
         self.logger = logging.getLogger('hercules')
         self.version_info_file = os.path.join(self.hercules_path, 'version_info.ini')
-
         self.servers = ['map-server', 'char-server', 'login-server']
 
         self.version_info = self._read_version_info()
@@ -56,6 +55,11 @@ class HerculesAdmin(object):
         self.autorestart = args.autorestart
 
     def _parse_version_info(self):
+        """Parse the version_info.ini file.
+
+        Returns:
+            dict: A dictionary of the keys and values in the version info file.
+        """
         version_info = {'git_version': 'unknown',
                         'packet_version': 'unknown',
                         'build_date': 'unknown',
@@ -90,7 +94,7 @@ class HerculesAdmin(object):
         Args:
             server (str): The server to get the pid for [map, login, char]
         Returns:
-            pid (int): The stored process ID for the server. None if no ID is stored.
+            int: The stored process ID for the server. None if no ID is stored.
         """
         pid_file_path = os.path.join(self.hercules_path, '%s.pid' % server)
         if os.path.exists(pid_file_path):
@@ -107,7 +111,16 @@ class HerculesAdmin(object):
         raise NotImplementedError
 
     def _set_config(self, config_file, key, value):
-        """Set the given value in the given configuration file."""
+        """Set the given value in the given configuration file.
+
+        Args:
+            config_file ([type]): [description]
+            key ([type]): [description]
+            value ([type]): [description]
+
+        Raises:
+            NotImplementedError: [description]
+        """
         raise NotImplementedError
 
     def _get_status(self, server):
@@ -116,13 +129,13 @@ class HerculesAdmin(object):
         Args:
             server (str): The server to check status for [map, login, char]
         Returns:
-            status (str): The server status [running, stopped, orphaned, missing].
+            str: The server status [running, stopped, orphaned, missing].
                 "orphaned" means there is a process for the server but no pid file (or one
                     with a pid that doesn't match the process)
                 "missing" means there is a pid file but no process for the server.
+        Raises:
+            AssertionError: No server status could be determined for the given server.
         """
-        status = {}
-        processes = {}
         expected_pid = self._server_pid(server)
 
         # We're expecting a server to be running
@@ -193,6 +206,7 @@ class HerculesAdmin(object):
                 proc.kill()
 
     def info(self):
+        """Print info on the Hercules server."""        
         self.logger.info('Hercules %s git version %s' %
                          (self.config['version_info']['arch'],
                           self.config['version_info']['git_version']))
@@ -202,6 +216,10 @@ class HerculesAdmin(object):
                          self.config['version_info']['server_mode'])
         self.logger.info('Build date %s' %
                          self.config['version_info']['build_date'])
+        for server in self.servers:
+            self.logger.info('%s status: %s (pid: %s)' % (server, 
+                                                          self._get_status(server),
+                                                          self._server_pid(server)))
 
     def execute(self):
         """Perform the operation specified by the command line."""
@@ -213,11 +231,23 @@ class HerculesAdmin(object):
         self.setup_interserver()
 
     def setup_database(self, hostname=None, username=None, password=None, database=None):
-        """Set up the database configuration file."""
+        """Set up the database configuration file.
+
+        Args:
+            hostname ([type], optional): [description]. Defaults to None.
+            username ([type], optional): [description]. Defaults to None.
+            password ([type], optional): [description]. Defaults to None.
+            database ([type], optional): [description]. Defaults to None.
+        """
         raise NotImplementedError
 
     def setup_interserver(self, username=None, password=None):
-        """Set up the inter-server configuration file and user."""
+        """Set up the inter-server configuration file and user.
+
+        Args:
+            username ([type], optional): [description]. Defaults to None.
+            password ([type], optional): [description]. Defaults to None.
+        """
         raise NotImplementedError
 
     def start(self):
