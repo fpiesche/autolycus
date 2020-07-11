@@ -172,7 +172,9 @@ class HerculesAdmin(object):
         if current_status == 'orphaned' or (current_status == 'running' and force):
             self._kill_server(server)
 
-        psutil.Popen([os.path.join(self.hercules_path, server)])
+        proc = psutil.Popen([os.path.join(self.hercules_path, server)])
+        with open(os.path.join(self.hercules_path, '%s.pid' % server), 'w') as pidfile:
+            print(proc.pid(), file=pidfile)
 
     def _kill_server(self, server):
         """Kill the specified server.
