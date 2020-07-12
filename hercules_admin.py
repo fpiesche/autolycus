@@ -103,7 +103,7 @@ class HerculesAdmin(object):
             'account', help='Edit or create an account on the server.')
         account.add_argument(
             'name', help='The user name for the account. Will be created if it does not exist.')
-        account.add_argument('password', help='The password for the account.')
+        account.add_argument('-p', '--password', help='The password for the account.')
         account.add_argument('-s', '--sex', help='The sex for the account (default: random).',
                              default=choice(['M', 'F']))
         account.add_argument('--admin', help='Whether the account should be admin.',
@@ -253,13 +253,14 @@ class HerculesAdmin(object):
                     '%s failed to exit within 10 seconds, killing process!' % server)
                 proc.kill()
 
+        os.remove(os.path.join(self.hercules_path, '%s.pid' % server))
+
     @property
     def _database_config(self):
         db_config = {}
         for key in ['db_username', 'db_password', 'db_hostname', 'db_port', 'db_database']:
             db_config[key] = self.config.get('sql_connection.conf', key).replace('"', '')
         return db_config
-
 
     def _database(self):
         """Get a database connection object as a context handler."""
@@ -354,7 +355,29 @@ class HerculesAdmin(object):
 
     def account(self, name, password=None, sex=None, admin=False):
         """Create or modify accounts on the server."""
-        raise NotImplementedError
+        account_spec = {
+            'userid': name
+        }
+
+        if sex or hasattr(self.args, 'sex'):
+            account_spec['sex'] = sex or self.args.sex
+        
+        if admin or hasattr(self.args, 'admin'):
+            account_spec['group_id'] = 99
+
+        with self._database() as db:
+            login_table = db['login']
+            if not login_table.find(userid=name):
+                if 'user_pass' not in account_spec:
+                    raise KeyError('Account %s does not exist so a password is required!' % name)
+                else:
+                    login_table.insert(account_spec)
+                    self.logger.log('Account %s created with%s admin rights.' %
+                                    (name, 'out' if not admin else ''))
+            else:
+                login_table.update(account_spec, ['userid'])
+                self.logger.log('Account %s updated to %s' %
+                                (name, account_spec))
 
 
 if __name__ == '__main__':
