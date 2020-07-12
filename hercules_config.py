@@ -74,18 +74,46 @@ class HerculesConfig(object):
             if matches.groups():
                 return matches.groups()[0]
 
-    def set(self, config_file, key, value):
+    def set(self, file_name, setting, value):
         """Set the given value in the given configuration file.
 
         Args:
             config_file ([type]): [description]
-            key ([type]): [description]
+            setting ([type]): [description]
             value ([type]): [description]
 
         Raises:
             NotImplementedError: [description]
         """
-        raise NotImplementedError
+        full_path = self._find_config_files(file_name)[0]
+        self.logger.debug('Setting %s in %s to %s.' % (setting, full_path, value))
+        lines = []
+        with open(full_path) as config_file:
+            config = config_file.read()
+
+        config_lines = config.splitlines()
+
+        matches = re.search(r'\s*%s\s*:.*' % setting, config)
+        if not matches:
+            # setting isn't currently in the file. Simply append it.
+            out_lines = config_lines
+            out_lines.append('%s: %s' % (setting, value))
+        else:
+            out_lines = []
+            for line in config_lines:
+                matches = re.search(r'\s*%s\s*:\s*(.*)' % setting, line)
+                if matches:
+                    if matches.groups()[0].startswith('"'):
+                        value = '"%s"' % value
+                    new_line = re.sub(matches.groups()[0], value, line)
+                    self.logger.debug('Replacing %s with %s.' % (line, new_line))
+                    out_lines.append(new_line)
+                else:
+                    out_lines.append(line)
+
+        with open(full_path, 'w') as outfile:
+            outfile.write(os.linesep.join(out_lines))
+
 
     def show_rate_messages(self, enabled):
         """Toggle XP/drop etc rate messages on login."""
