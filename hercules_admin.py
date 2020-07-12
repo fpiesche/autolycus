@@ -7,6 +7,7 @@ from configparser import ConfigParser
 import dataset
 import dateparser
 import datetime
+import glob
 import logging
 import os
 import platform
@@ -14,6 +15,7 @@ import psutil
 from random import choice
 import re
 import sys
+from time import sleep
 
 from hercules_config import HerculesConfig
 from autolycus_logger import AutolycusFormatter
@@ -77,6 +79,10 @@ class HerculesAdmin(object):
                               help='The user name used to connect to the database server.')
         firstrun.add_argument('-dp', '--db_password',  default=os.environ.get('MYSQL_PASSWORD', ''),
                               help='The password for the database user.')
+        firstrun.add_argument('-dd', '--db_database',  default=os.environ.get('MYSQL_DATABASE', ''),
+                              help='The database on the MySQL server to use.')
+        firstrun.add_argument('--db_port',  default=os.environ.get('MYSQL_PORT', ''),
+                              help='The port used to reach the database server.')
         firstrun.add_argument('-iu', '--is_username', default=os.environ.get('INTERSERVER_USER', ''),
                               help='The user name used for servers to communicate.')
         firstrun.add_argument('-ip', '--is_password', help='The password for inter-server user.',
@@ -315,6 +321,7 @@ class HerculesAdmin(object):
             return {'ok': False, 'url': db.url, 'reason': str(exc).replace('\n', ' ')}
 
     def _wait_for_database(self, timeout=60):
+        self.logger.info('Waiting for database for up to %s seconds...' % timeout)
         while timeout > 0:
             status = self._database_status()
             if status['ok']:
@@ -366,14 +373,15 @@ class HerculesAdmin(object):
             port (str, optional): The network port used to reach the database server.
         """
         field_mappings = {
-            'db_hostname': hostname or self.args.get('db_hostname'),
-            'db_username': username or self.args.get('db_username'),
-            'db_pass': password or self.args.get('db_pass'),
-            'db_port': port or self.args.get('db_port'),
-            'db_database': database or self.args.get('db_database')
+            'db_hostname': hostname or self.args.db_hostname,
+            'db_username': username or self.args.db_username,
+            'db_pass': password or self.args.db_password,
+            'db_port': port or self.args.db_port,
+            'db_database': database or self.args.db_database
         }
+        self.logger.info('Setting up database connection as %s.' % (field_mappings))
         for setting, value in field_mappings.items():
-            if value is not None:
+            if value and self.config.get('sql_connection.conf', setting) not in [value, '"%s"' % value]:
                 self.config.set('sql_connection.conf', setting, value)
 
     def setup_interserver(self, username=None, password=None):
@@ -383,10 +391,20 @@ class HerculesAdmin(object):
             username (str, optional): The user name for the inter-server user.
             password (str, optional): The password for the inter-server user.
         """
-        self.account(id=1, name=username, password=password, sex='S')
-        for config_file in ['char-server.conf', 'map-server.conf']:
-            self.config.set(config_file, 'userid', username)
-            self.config.set(config_file, 'passwd', password)
+        field_mappings = {
+            'userid': username or self.args.is_username,
+            'passwd': password or self.args.is_password
+        }
+
+        if field_mappings['userid'] or field_mappings['passwd']:
+            self.logger.info('Setting up interserver user %s with password %s.' % (username, password))
+            self.account(id=1, name=field_mappings['userid'],
+                        password=field_mappings['passwd'], sex='S')
+            for config_file in ['char-server.conf', 'map-server.conf'], setting, value in field_mappings.items():
+                if value and self.config.get(config_file, setting) not in [value, '"%s"' % value]:
+                    self.config.set(config_file, setting, value)
+        else:
+            self.logger.info('No interserver user specified to set up, leaving defaults.')
 
 
     def start(self):
@@ -433,37 +451,47 @@ class HerculesAdmin(object):
             build_date = dateparser.parse(self.version_info['build_date'],
                                           date_formats=['%Y-%m-%d_%H-%M-%S'])
 
-        upgrade_files = glob.glob(os.path.join(self.hercules_path, 'sql-files', 'upgrades', '*.sql'))
+        upgrade_files = sorted(glob.glob(os.path.join(self.hercules_path, 'sql-files',
+                                                      'upgrades', '*.sql')))
 
         for file_name in upgrade_files:
             upgrade_date = dateparser.parse(os.path.splitext(os.path.basename(file_name))[0],
                                             date_formats=['%Y-%m-%d--%H-%M'])
             if upgrade_date is None:
-                test.logger.info('Failed to parse upgrade date for %s - ignoring file.' % file_name)
+                self.logger.info('Failed to parse upgrade date for %s - ignoring file.' % file_name)
                 continue
-            else:
+            elif upgrade_date > build_date:
                 self.import_sql(file_name)
+            else:
+                self.logger.debug('%s is older than build, no need to import.' % file_name)
 
     def import_sql(self, file_name):
         """Import an .sql file to the database
 
         Args:
             file_name (str): The full path to the .sql file to import.
+        
+        Raises:
+            IOError: The database is unavailable.
         """
         self.logger.info('Importing %s to database...' % file_name)
+
+        if not self._database_status()['ok']:
+            raise IOError('Database is unavailable; cannot import SQL file!')
+
         with open(file_name) as sql_file, self._database() as db:
             query = ''
 
-            for line in sql_file:
-                if line.startswith('--'):
-                    # Ignore any comments
+            for line in sql_file.readlines():
+                if line.startswith('--') or line.startswith('#') or not line.strip():
+                    # Ignore any comments, SQL update timestamp lines and empty lines
                     continue
 
                 # just add any non-comment lines to the query
-                query += ' %s' % line.strip()
+                query += '%s ' % line.strip()
 
                 # If the current line ends a command, run it
-                if line.endswith(';'):
+                if line.strip().endswith(';'):
                     self.logger.debug(query)
                     try:
                         db.query(query)
