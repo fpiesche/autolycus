@@ -1,3 +1,4 @@
 dataset
 dateparser
 Flask       # 😎
+mysqlclient

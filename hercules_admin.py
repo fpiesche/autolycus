@@ -1,46 +1,45 @@
 #!/usr/bin/env python3
 
+from __future__ import print_function, division, unicode_literals
+
 import argparse
 from configparser import ConfigParser
 import dataset
 import dateparser
 import logging
+import os
 import psutil
+from random import choice
+import re
+import sys
 
-# Going to leave this for now because I'll have to write my own
-# parser for Hercules' config files and that's a whole can of
-# worms that I don't want to touch just yet...
-# from hercules_config import HerculesConfig
-
+from hercules_config import HerculesConfig
 
 class HerculesAdmin(object):
+
     def __init__(self):
         self._parse_args()
 
         self.logger = logging.getLogger('hercules')
-        self.version_info_file = os.path.join(self.hercules_path, 'version_info.ini')
+        self.logger.setLevel(logging.DEBUG)
+
+        stdout_log = logging.StreamHandler(sys.stdout)
+        stdout_log.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        stdout_log.setFormatter(formatter)
+        self.logger.addHandler(stdout_log)
+
         self.servers = ['map-server', 'char-server', 'login-server']
 
+        self.config = HerculesConfig(self.hercules_path)
+
+        self.version_info_file = os.path.join(
+            self.hercules_path, 'version_info.ini')
         self.version_info = self._read_version_info()
-        self.pids = self._read_pids()
 
     def _parse_args(self):
         parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-        parser.add_argument('operation',
-                            choices=['info', 'start', 'stop', 'restart',
-                                     'setup_all', 'setup_database', 'setup_interserver'],
-                            help=('The action to perform on the servers.\n',
-                                  '\tinfo: Output version information and exit.\n',
-                                  '\tstart: Start the game servers.\n',
-                                  '\tstop: Stop the game servers.\n',
-                                  '\trestart: Stop and restart the servers as needed.\n',
-                                  '\tsetup_all: Set up the server configuration.\n',
-                                  '\tsetup_database: Set up the database server configuration.\n',
-                                  '\tsetup_interserver: Set up the inter-server configuration.\n',
-                                  '\tsql_upgrades: Run any SQL upgrades required.\n',
-                                  '\tfirst_run: Setup database and inter-server config, run SQL upgrades, and start server.\n',
-                                  ))
 
         parser.add_argument('-p', '--hercules_path',
                             default=os.path.abspath(os.path.dirname(__file__)),
@@ -48,13 +47,74 @@ class HerculesAdmin(object):
         parser.add_argument('-r', '--autorestart', action='store_true',
                             help='Automatically restart servers when making configuration changes.')
 
-        args = parser.parse_args()
-        self.operation = args.operation
-        self.hercules_path = args.hercules_path
-        self.foreground = args.foreground
-        self.autorestart = args.autorestart
+        subparsers = parser.add_subparsers(title='Available commands')
 
-    def _parse_version_info(self):
+        info = subparsers.add_parser('info',
+                                     help='Output server status and version information and exit.')
+        info.set_defaults(func=self.info)
+
+        start = subparsers.add_parser('start', help='Start the game servers.')
+        start.set_defaults(func=self.start)
+
+        stop = subparsers.add_parser('stop', help='Stop the game servers.')
+        stop.set_defaults(func=self.stop)
+
+        restart = subparsers.add_parser(
+            'restart', help='Stop and restart the game servers.')
+        restart.set_defaults(func=self.restart)
+
+        sql_upgrades = subparsers.add_parser(
+            'sql_upgrades', help='Run any SQL upgrades needed.')
+        sql_upgrades.set_defaults(func=self.sql_upgrades)
+
+        firstrun = subparsers.add_parser(
+            'first_run', help='Set up database and inter-server config, run SQL upgrades, and start the game servers.')
+        firstrun.add_argument('-dh', '--db_hostname', default='db',
+                              help='The host name or IP address for the database server.')
+        firstrun.add_argument('-du', '--db_username', default=os.environ.get('MYSQL_USER', ''),
+                              help='The user name used to connect to the database server.')
+        firstrun.add_argument('-dp', '--db_password',  default=os.environ.get('MYSQL_PASSWORD', ''),
+                              help='The password for the database user.')
+        firstrun.add_argument('-iu', '--is_username', default=os.environ.get('INTERSERVER_USER', ''),
+                              help='The user name used for servers to communicate.')
+        firstrun.add_argument('-ip', '--is_password', help='The password for inter-server user.',
+                              default=os.environ.get('INTERSERVER_PASSWORD', ''))
+        firstrun.set_defaults(func=self.first_run)
+
+        dbsetup = subparsers.add_parser(
+            'setup_db', help='Set up the database server configuration.')
+        dbsetup.add_argument('-dh', '--db_hostname', default='db',
+                             help='The host name or IP address for the database server.')
+        dbsetup.add_argument('-du', '--db_username', default=os.environ.get('MYSQL_USER', ''),
+                             help='The user name used to connect to the database server.')
+        dbsetup.add_argument('-dp', '--db_password',  default=os.environ.get('MYSQL_PASSWORD', ''),
+                             help='The password for the database user.')
+        dbsetup.set_defaults(func=self.setup_database)
+
+        issetup = subparsers.add_parser(
+            'setup_interserver', help='Set up the inter-server communications configuration.')
+        issetup.add_argument('-iu', '--is_username', default=os.environ.get('INTERSERVER_USER', ''),
+                             help='The user name used for servers to communicate.')
+        issetup.add_argument('-ip', '--is_password', help='The password for inter-server user.',
+                             default=os.environ.get('INTERSERVER_PASSWORD', ''))
+        issetup.set_defaults(func=self.setup_interserver)
+
+        account = subparsers.add_parser(
+            'account', help='Edit or create an account on the server.')
+        account.add_argument(
+            'name', help='The user name for the account. Will be created if it does not exist.')
+        account.add_argument('password', help='The password for the account.')
+        account.add_argument('-s', '--sex', help='The sex for the account (default: random).',
+                             default=choice(['M', 'F']))
+        account.add_argument('--admin', help='Whether the account should be admin.',
+                             action='store_true')
+        account.set_defaults(func=self.account)
+
+        self.args = parser.parse_args()
+        self.hercules_path = os.path.abspath(self.args.hercules_path)
+        self.autorestart = self.args.autorestart
+
+    def _read_version_info(self):
         """Parse the version_info.ini file.
 
         Returns:
@@ -63,14 +123,15 @@ class HerculesAdmin(object):
         version_info = {'git_version': 'unknown',
                         'packet_version': 'unknown',
                         'build_date': 'unknown',
-                        'server_mode': 'unknown'}
+                        'server_mode': 'unknown',
+                        'arch': 'unknown'}
 
         if not os.path.exists(self.version_info_file):
             self.logger.warning('Failed to find version info file %s! Version info will be empty.'
                                 % self.version_info_file)
             return version_info
 
-        config = configparser.ConfigParser()
+        config = ConfigParser()
         config.read(self.version_info_file)
 
         if 'version_info' not in config.sections():
@@ -103,26 +164,6 @@ class HerculesAdmin(object):
         else:
             return None
 
-    def _read_config(self):
-        """Read the current database and inter-server configuration.
-
-        This will use the information in the server .conf files by default, but can be
-        overridden using environment variables."""
-        raise NotImplementedError
-
-    def _set_config(self, config_file, key, value):
-        """Set the given value in the given configuration file.
-
-        Args:
-            config_file ([type]): [description]
-            key ([type]): [description]
-            value ([type]): [description]
-
-        Raises:
-            NotImplementedError: [description]
-        """
-        raise NotImplementedError
-
     def _get_status(self, server):
         """Get the status for the given server.
 
@@ -139,13 +180,17 @@ class HerculesAdmin(object):
         expected_pid = self._server_pid(server)
 
         # We're expecting a server to be running
-        if expected_pid is not None and psutil.pid_exists(expected_pid):
-            proc = psutil.Process(expected_pid)
-            if proc.name().startswith(server):
-                # We've found a process of the right name with the pid we're expecting
-                return ('running', expected_pid)
+        if expected_pid is not None:
+            if psutil.pid_exists(expected_pid):
+                proc = psutil.Process(expected_pid)
+                if proc.name().startswith(server):
+                    # We've found a process of the right name with the pid we're expecting
+                    return ('running', expected_pid)
+                else:
+                    # The stored pid exists but belongs to another process
+                    return ('missing', expected_pid)
             else:
-                # The stored pid exists but belongs to another process
+                # The stored pid does not exist
                 return ('missing', expected_pid)
 
         # We aren't aware of a running server
@@ -154,14 +199,14 @@ class HerculesAdmin(object):
             for proc in psutil.process_iter():
                 with proc.oneshot():
                     if proc.name().startswith(server):
-                        matching_processes.append(proc.pid())
+                        matching_processes.append(proc.pid)
 
             if len(matching_processes) > 1:
                 self.logger.warn('Found multiple processes matching %s!',
                                  'Status info may be unreliable.'
                                  % server)
                 return ('orphaned', matching_processes)
-            elif len(mathing_processes) == 1:
+            elif len(matching_processes) == 1:
                 return ('orphaned', matching_processes[0])
             else:
                 return ('stopped', None)
@@ -181,13 +226,14 @@ class HerculesAdmin(object):
 
         current_status, pid = self._get_status(server)
         if current_status == 'missing' or (current_status == 'running' and force):
-            os.path.remove(os.path.join(self.hercules_path, '%s.pid' % server))
+            os.remove(os.path.join(self.hercules_path, '%s.pid' % server))
         if current_status == 'orphaned' or (current_status == 'running' and force):
             self._kill_server(server)
 
         proc = psutil.Popen([os.path.join(self.hercules_path, server)])
-        with open(os.path.join(self.hercules_path, '%s.pid' % server), 'w') as pidfile:
-            print(proc.pid(), file=pidfile)
+        if psutil.pid_exists(proc.pid):
+            with open(os.path.join(self.hercules_path, '%s.pid' % server), 'w') as pidfile:
+                print(proc.pid, file=pidfile)
 
     def _kill_server(self, server):
         """Kill the specified server.
@@ -197,33 +243,62 @@ class HerculesAdmin(object):
         """
         pid = self._server_pid(server)
         if psutil.pid_exists(pid):
+            self.logger.info('Asking %s (pid %s) to shut down.' % (server, pid))
             proc = psutil.Process(pid)
             proc.terminate()
             try:
                 proc.wait(timeout=10)
             except psutil.TimeoutExpired:
-                self.logger.warn('%s failed to exit within 10 seconds, killing process!' % server)
+                self.logger.warn(
+                    '%s failed to exit within 10 seconds, killing process!' % server)
                 proc.kill()
+
+    @property
+    def _database_config(self):
+        db_config = {}
+        for key in ['db_username', 'db_password', 'db_hostname', 'db_port', 'db_database']:
+            db_config[key] = self.config.get('sql_connection.conf', key).replace('"', '')
+        return db_config
+
+
+    def _database(self):
+        """Get a database connection object as a context handler."""
+        db_config = self._database_config
+        db = dataset.connect('mysql://%s:%s@%s:%s/%s' %
+                             (db_config['db_username'], db_config['db_password'],
+                              db_config['db_hostname'], db_config['db_port'],
+                              db_config['db_database']))
+        return db
+
+    def _database_status(self):
+        """Check connection to the database and output the connection status."""
+        db = self._database()
+        try:
+            self._database().tables
+            return 'OK: %s' % db.url
+        except Exception as exc:
+            return '%s ERROR: %s' % (db.url, str(exc))
+
+    def execute(self):
+        self.args.func()
 
     def info(self):
         """Print info on the Hercules server."""
         self.logger.info('Hercules %s git version %s' %
-                         (self.config['version_info']['arch'],
-                          self.config['version_info']['git_version']))
+                         (self.version_info['arch'],
+                          self.version_info['git_version']))
         self.logger.info('Packet version %s' %
-                         self.config['version_info']['packet_version'])
+                         self.version_info['packet_version'])
         self.logger.info('%s mode' %
-                         self.config['version_info']['server_mode'])
+                         self.version_info['server_mode'])
         self.logger.info('Build date %s' %
-                         self.config['version_info']['build_date'])
+                         self.version_info['build_date'])
         for server in self.servers:
             self.logger.info('%s status: %s (pid: %s)' % (server,
-                                                          self._get_status(server),
+                                                          self._get_status(
+                                                              server),
                                                           self._server_pid(server)))
-
-    def execute(self):
-        """Perform the operation specified by the command line."""
-        getattr(self, self.operation)()
+        self.logger.info('Database status: %s' % self._database_status())
 
     def setup_all(self):
         """Read configuration information and set up the server configuration files to match."""
@@ -276,6 +351,10 @@ class HerculesAdmin(object):
         self.setup_interserver()
         self.sql_upgrades()
         self.start()
+
+    def account(self, name, password=None, sex=None, admin=False):
+        """Create or modify accounts on the server."""
+        raise NotImplementedError
 
 
 if __name__ == '__main__':
