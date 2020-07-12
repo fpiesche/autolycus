@@ -89,7 +89,11 @@ class HerculesAdmin(object):
                              help='The user name used to connect to the database server.')
         dbsetup.add_argument('-dp', '--db_password',  default=os.environ.get('MYSQL_PASSWORD', ''),
                              help='The password for the database user.')
-        dbsetup.set_defaults(func=self.setup_database)
+        dbsetup.add_argument('-dd', '--db_database',  default=os.environ.get('MYSQL_DATABASE', ''),
+                             help='The database on the MySQL server to use.')
+        dbsetup.add_argument('--db_port',  default=os.environ.get('MYSQL_PORT', ''),
+                             help='The port used to reach the database server.')
+        dbsetup.set_defaults(func=self.setup_database_connection)
 
         issetup = subparsers.add_parser(
             'setup_interserver', help='Set up the inter-server communications configuration.')
@@ -276,9 +280,20 @@ class HerculesAdmin(object):
         db = self._database()
         try:
             self._database().tables
-            return 'OK: %s' % db.url
+            return {'ok': True, 'url': db.url, 'reason': None}
         except Exception as exc:
-            return '%s ERROR: %s' % (db.url, str(exc))
+            return {'ok': False, 'url': db.url, 'reason': str(exc)}
+
+    def _wait_for_database(self, timeout=60):
+        while timeout > 0:
+            status = self._database_status()
+            if status['ok']:
+                return True
+            else:
+                timeout -= 1
+                sleep(1)
+        raise IOError('Database %s did not become available in time! Reason: %s' %
+                      (status['url'], status['reason']))
 
     def execute(self):
         self.args.func()
@@ -303,28 +318,43 @@ class HerculesAdmin(object):
 
     def setup_all(self):
         """Read configuration information and set up the server configuration files to match."""
-        self.setup_database()
+        self.setup_database_connection()
         self.setup_interserver()
 
-    def setup_database(self, hostname=None, username=None, password=None, database=None):
+    def setup_database_connection(self, hostname=None, username=None, password=None,
+                                  database=None, port=None):
         """Set up the database configuration file.
 
         Args:
-            hostname ([type], optional): [description]. Defaults to None.
-            username ([type], optional): [description]. Defaults to None.
-            password ([type], optional): [description]. Defaults to None.
-            database ([type], optional): [description]. Defaults to None.
+            hostname (str, optional): The host name for the database server.
+            username (str, optional): The user name used to log into the database.
+            password (str, optional): The password for the database user.
+            database (str, optional): The database to use on the server.
+            port (str, optional): The network port used to reach the database server.
         """
-        raise NotImplementedError
+        field_mappings = {
+            'db_hostname': hostname or self.args.get('db_hostname'),
+            'db_username': username or self.args.get('db_username'),
+            'db_pass': password or self.args.get('db_pass'),
+            'db_port': port or self.args.get('db_port'),
+            'db_database': database or self.args.get('db_database')
+        }
+        for setting, value in field_mappings.items():
+            if value is not None:
+                self.config.set('sql_connection.conf', setting, value)
 
     def setup_interserver(self, username=None, password=None):
         """Set up the inter-server configuration file and user.
 
         Args:
-            username ([type], optional): [description]. Defaults to None.
-            password ([type], optional): [description]. Defaults to None.
+            username (str, optional): The user name for the inter-server user.
+            password (str, optional): The password for the inter-server user.
         """
-        raise NotImplementedError
+        self.account(id=1, name=username, password=password, sex='S')
+        for config_file in ['char-server.conf', 'map-server.conf']:
+            self.config.set(config_file, 'userid', username)
+            self.config.set(config_file, 'passwd', password)
+
 
     def start(self):
         """Start the servers."""
@@ -348,12 +378,13 @@ class HerculesAdmin(object):
 
     def first_run(self):
         """Set up database and interserver settings, run SQL upgrades, and start the server."""
-        self.setup_database()
+        self.setup_database_connection()
+        self._wait_for_database()
         self.setup_interserver()
         self.sql_upgrades()
         self.start()
 
-    def account(self, name, password=None, sex=None, admin=False):
+    def account(self, name, id=None, password=None, sex=None, admin=False):
         """Create or modify accounts on the server."""
         account_spec = {
             'userid': name
@@ -365,6 +396,9 @@ class HerculesAdmin(object):
         if admin or hasattr(self.args, 'admin'):
             account_spec['group_id'] = 99
 
+        if id:
+            account_spec['account_id'] = id
+
         with self._database() as db:
             login_table = db['login']
             if not login_table.find(userid=name):
@@ -375,7 +409,11 @@ class HerculesAdmin(object):
                     self.logger.log('Account %s created with%s admin rights.' %
                                     (name, 'out' if not admin else ''))
             else:
-                login_table.update(account_spec, ['userid'])
+                if 'id' in account_spec:
+                    key = 'id'
+                else:
+                    key = 'userid'
+                login_table.update(account_spec, [key])
                 self.logger.log('Account %s updated to %s' %
                                 (name, account_spec))
 
