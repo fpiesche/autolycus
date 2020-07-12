@@ -2,11 +2,11 @@ import logging
 
 class AutolycusFormatter(logging.Formatter):
 
-    err_fmt  = '❌  %(msg)s'
-    dbg_fmt  = '🐞  %(module)s: %(lineno)d: %(msg)s'
-    info_fmt = 'ℹ️  %(msg)s'
-    warning_fmt = '⚠️  %(msg)s'
-    critical_fmt = '🚨  %(msg)s'
+    err_fmt  = '❌ %(asctime)s: %(msg)s'
+    dbg_fmt  = '🐞 %(asctime)s: %(msg)s'
+    info_fmt = 'ℹ️  %(asctime)s: %(msg)s'
+    warning_fmt = '⚠️ %(asctime)s: %(msg)s'
+    critical_fmt = '🚨 %(asctime)s: %(msg)s'
 
     def __init__(self):
         super().__init__(fmt='%(levelno)d: %(msg)s', datefmt=None, style='%')  
