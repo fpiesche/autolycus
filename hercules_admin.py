@@ -6,14 +6,17 @@ import argparse
 from configparser import ConfigParser
 import dataset
 import dateparser
+import datetime
 import logging
 import os
+import platform
 import psutil
 from random import choice
 import re
 import sys
 
 from hercules_config import HerculesConfig
+from autolycus_logger import AutolycusFormatter
 
 class HerculesAdmin(object):
 
@@ -25,8 +28,7 @@ class HerculesAdmin(object):
 
         stdout_log = logging.StreamHandler(sys.stdout)
         stdout_log.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        stdout_log.setFormatter(formatter)
+        stdout_log.setFormatter(AutolycusFormatter())
         self.logger.addHandler(stdout_log)
 
         self.servers = ['map-server', 'char-server', 'login-server']
@@ -114,6 +116,12 @@ class HerculesAdmin(object):
                              action='store_true')
         account.set_defaults(func=self.account)
 
+        import_sql = subparsers.add_parser(
+            'import_sql', help='Import an SQL file into the database.')
+        import_sql.add_argument(
+            'file_name', help='The path to the .sql file to import.')
+        import_sql.set_defaults(func=self.import_sql)
+
         self.args = parser.parse_args()
         self.hercules_path = os.path.abspath(self.args.hercules_path)
         self.autorestart = self.args.autorestart
@@ -167,6 +175,15 @@ class HerculesAdmin(object):
                 return int(pidfile.read())
         else:
             return None
+
+    def _server_executable(self, server_name):
+        """Return the full path for the executable for the given server, with extension as needed.
+
+        Args:
+            server_name (str): The server name to get the executable path for.
+        """
+        return os.path.join(self.hercules_path, '%s%s' %
+                            (server_name, '.exe' if platform.system() == 'Windows' else ''))
 
     def _get_status(self, server):
         """Get the status for the given server.
@@ -227,17 +244,25 @@ class HerculesAdmin(object):
             server (str): The server executable to run.
             force (boolean): Whether to restart the server if it is already running.
         """
-
         current_status, pid = self._get_status(server)
-        if current_status == 'missing' or (current_status == 'running' and force):
-            os.remove(os.path.join(self.hercules_path, '%s.pid' % server))
-        if current_status == 'orphaned' or (current_status == 'running' and force):
-            self._kill_server(server)
 
-        proc = psutil.Popen([os.path.join(self.hercules_path, server)])
+        if current_status == 'running' and not force:
+            self.logger.info('%s already running on pid %s, not starting another.' % (server, pid))
+            return
+        elif current_status == 'orphaned' or (current_status == 'running' and force):
+            self.logger.info('%s %s on pid %s, killing...' % (server, current_status, pid))
+            self._kill_server(server)
+        elif current_status == 'missing':
+            self.logger.info('%s missing on pid %s, removing pidfile.' % (server, pid))
+            os.remove(os.path.join(self.hercules_path, '%s.pid' % server))
+
+        proc = psutil.Popen([self._server_executable(server)])
         if psutil.pid_exists(proc.pid):
             with open(os.path.join(self.hercules_path, '%s.pid' % server), 'w') as pidfile:
                 print(proc.pid, file=pidfile)
+            self.logger.info('Started %s with pid %s.' % (server, proc.pid))
+        else:
+            raise OSError('Ran %s but failed to find process!' % self._server_executable(server))
 
     def _kill_server(self, server):
         """Kill the specified server.
@@ -245,10 +270,11 @@ class HerculesAdmin(object):
         Args:
             server (str): Which of the servers to kill.
         """
-        pid = self._server_pid(server)
-        if psutil.pid_exists(pid):
-            self.logger.info('Asking %s (pid %s) to shut down.' % (server, pid))
-            proc = psutil.Process(pid)
+        server_status, server_pid = self._get_status(server)
+        pidfile = os.path.join(self.hercules_path, '%s.pid' % server)
+        if server_status in ['orphaned', 'running']:
+            self.logger.info('Asking %s (server_pid %s) to shut down.' % (server, server_pid))
+            proc = psutil.Process(server_pid)
             proc.terminate()
             try:
                 proc.wait(timeout=10)
@@ -256,8 +282,12 @@ class HerculesAdmin(object):
                 self.logger.warn(
                     '%s failed to exit within 10 seconds, killing process!' % server)
                 proc.kill()
+        else:
+            self.logger.info('%s is %s, no need to stop.' % (server, server_status))
 
-        os.remove(os.path.join(self.hercules_path, '%s.pid' % server))
+        if os.path.exists(pidfile):
+            self.logger.info('Removing pidfile for %s.' % (server))
+            os.remove(pidfile)
 
     @property
     def _database_config(self):
@@ -282,7 +312,7 @@ class HerculesAdmin(object):
             self._database().tables
             return {'ok': True, 'url': db.url, 'reason': None}
         except Exception as exc:
-            return {'ok': False, 'url': db.url, 'reason': str(exc)}
+            return {'ok': False, 'url': db.url, 'reason': str(exc).replace('\n', ' ')}
 
     def _wait_for_database(self, timeout=60):
         while timeout > 0:
@@ -310,11 +340,14 @@ class HerculesAdmin(object):
         self.logger.info('Build date %s' %
                          self.version_info['build_date'])
         for server in self.servers:
-            self.logger.info('%s status: %s (pid: %s)' % (server,
-                                                          self._get_status(
-                                                              server),
-                                                          self._server_pid(server)))
-        self.logger.info('Database status: %s' % self._database_status())
+            status, pid = self._get_status(server)
+            self.logger.info('%s status: %s (pid: %s)' % (server, status, pid))
+        db_status = self._database_status()
+        self.logger.info('Database status: %s' % ('OK' if db_status['ok'] else 'Unavailable'))
+        self.logger.info('Database URL: %s' % db_status['url'])
+        if db_status['reason']:
+            self.logger.info('Database status reason: %s' % db_status['reason'])
+
 
     def setup_all(self):
         """Read configuration information and set up the server configuration files to match."""
@@ -360,7 +393,10 @@ class HerculesAdmin(object):
         """Start the servers."""
         self.info()
         for server in self.servers:
-            self._run_executable(server)
+            try:
+                self._run_executable(server)
+            except Exception as exc:
+                raise OSError('Failed to run %s! Reason: %s' % (server, exc))
 
     def stop(self):
         """Stop the servers."""
@@ -372,9 +408,70 @@ class HerculesAdmin(object):
         self.stop()
         self.start()
 
-    def sql_upgrades(self):
-        """Determine whether any SQL upgrades need to be run and do so if appropriate."""
-        raise NotImplementedError
+    def sql_upgrades(self, force=False):
+        """Determine whether any SQL upgrades need to be run and do so if appropriate.
+        
+        Args:
+            force (boolean): Whether or not to apply SQL updates even if build date cannot be
+                confidently determined.
+        """
+        if self.version_info['build_date'] == 'unknown':
+            if not force:
+                raise KeyError('Could not get build date from %s! SQL upgrades are unsafe.'
+                               % self.version_info_file +
+                               ' To apply SQL upgrades anyway, use the "force" flag.')
+            else:
+                build_date = datetime.datetime.fromtimestamp(
+                    os.path.getctime(self._server_executable('char-server')))
+                test.logger.warn('Failed to get build date from %s! SQL upgrades are unsafe.'
+                               % self.version_info_file)
+                test.logger.warn('sql_upgrades called with force argument, proceeding anyway.')
+                test.logger.warn('⚠️⚠️⚠️ THIS MAY BREAK YOUR DATABASE! ⚠️⚠️⚠️')
+                test.logger.warn('Assuming %s creation date %s as build date.' %
+                                 (self._server_executable('char-server'), build_date))
+        else:
+            build_date = dateparser.parse(self.version_info['build_date'],
+                                          date_formats=['%Y-%m-%d_%H-%M-%S'])
+
+        upgrade_files = glob.glob(os.path.join(self.hercules_path, 'sql-files', 'upgrades', '*.sql'))
+
+        for file_name in upgrade_files:
+            upgrade_date = dateparser.parse(os.path.splitext(os.path.basename(file_name))[0],
+                                            date_formats=['%Y-%m-%d--%H-%M'])
+            if upgrade_date is None:
+                test.logger.info('Failed to parse upgrade date for %s - ignoring file.' % file_name)
+                continue
+            else:
+                self.import_sql(file_name)
+
+    def import_sql(self, file_name):
+        """Import an .sql file to the database
+
+        Args:
+            file_name (str): The full path to the .sql file to import.
+        """
+        self.logger.info('Importing %s to database...' % file_name)
+        with open(file_name) as sql_file, self._database() as db:
+            query = ''
+
+            for line in sql_file:
+                if line.startswith('--'):
+                    # Ignore any comments
+                    continue
+
+                # just add any non-comment lines to the query
+                query += ' %s' % line.strip()
+
+                # If the current line ends a command, run it
+                if line.endswith(';'):
+                    self.logger.debug(query)
+                    try:
+                        db.query(query)
+                    except Exception as exc:
+                        self.logger.error('SQL statement error: %s' % exc)
+
+                    # empty out current query after running the statement.
+                    query = ''
 
     def first_run(self):
         """Set up database and interserver settings, run SQL upgrades, and start the server."""
