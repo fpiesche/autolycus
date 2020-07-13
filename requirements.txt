@@ -2,3 +2,4 @@ dataset
 dateparser
 Flask       # watch this space!
 mysqlclient
+psutil
