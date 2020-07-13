@@ -8,6 +8,7 @@ import dataset
 import dateparser
 import datetime
 import glob
+from hashlib import md5
 import logging
 import os
 import platform
@@ -71,23 +72,23 @@ class HerculesAdmin(object):
             'sql_upgrades', help='Run any SQL upgrades needed.')
         sql_upgrades.set_defaults(func=self.sql_upgrades)
 
-        firstrun = subparsers.add_parser(
-            'first_run', help='Set up database and inter-server config, run SQL upgrades, and start the game servers.')
-        firstrun.add_argument('-dh', '--db_hostname', default='db',
+        setupall = subparsers.add_parser(
+            'setup_all', help='Set up database and inter-server config and run SQL upgrades.')
+        setupall.add_argument('-dh', '--db_hostname', default='db',
                               help='The host name or IP address for the database server.')
-        firstrun.add_argument('-du', '--db_username', default=os.environ.get('MYSQL_USER', ''),
+        setupall.add_argument('-du', '--db_username', default=os.environ.get('MYSQL_USER', ''),
                               help='The user name used to connect to the database server.')
-        firstrun.add_argument('-dp', '--db_password',  default=os.environ.get('MYSQL_PASSWORD', ''),
+        setupall.add_argument('-dp', '--db_password',  default=os.environ.get('MYSQL_PASSWORD', ''),
                               help='The password for the database user.')
-        firstrun.add_argument('-dd', '--db_database',  default=os.environ.get('MYSQL_DATABASE', ''),
+        setupall.add_argument('-dd', '--db_database',  default=os.environ.get('MYSQL_DATABASE', ''),
                               help='The database on the MySQL server to use.')
-        firstrun.add_argument('--db_port',  default=os.environ.get('MYSQL_PORT', ''),
+        setupall.add_argument('--db_port',  default=os.environ.get('MYSQL_PORT', '3306'),
                               help='The port used to reach the database server.')
-        firstrun.add_argument('-iu', '--is_username', default=os.environ.get('INTERSERVER_USER', ''),
+        setupall.add_argument('-iu', '--is_username', default=os.environ.get('INTERSERVER_USER', ''),
                               help='The user name used for servers to communicate.')
-        firstrun.add_argument('-ip', '--is_password', help='The password for inter-server user.',
+        setupall.add_argument('-ip', '--is_password', help='The password for inter-server user.',
                               default=os.environ.get('INTERSERVER_PASSWORD', ''))
-        firstrun.set_defaults(func=self.first_run)
+        setupall.set_defaults(func=self.setup_all)
 
         dbsetup = subparsers.add_parser(
             'setup_db', help='Set up the database server configuration.')
@@ -99,7 +100,7 @@ class HerculesAdmin(object):
                              help='The password for the database user.')
         dbsetup.add_argument('-dd', '--db_database',  default=os.environ.get('MYSQL_DATABASE', ''),
                              help='The database on the MySQL server to use.')
-        dbsetup.add_argument('--db_port',  default=os.environ.get('MYSQL_PORT', ''),
+        dbsetup.add_argument('--db_port',  default=os.environ.get('MYSQL_PORT', '3306'),
                              help='The port used to reach the database server.')
         dbsetup.set_defaults(func=self.setup_database_connection)
 
@@ -315,7 +316,7 @@ class HerculesAdmin(object):
         """Check connection to the database and output the connection status."""
         db = self._database()
         try:
-            self._database().tables
+            db.tables
             return {'ok': True, 'url': db.url, 'reason': None}
         except Exception as exc:
             return {'ok': False, 'url': db.url, 'reason': str(exc).replace('\n', ' ')}
@@ -333,7 +334,10 @@ class HerculesAdmin(object):
                       (status['url'], status['reason']))
 
     def execute(self):
-        self.args.func()
+        try:
+            self.args.func()
+        except Exception as exc:
+            self.logger.error(f'Failed to execute {self.args.func}! Reason: {exc}')
 
     def info(self):
         """Print info on the Hercules server."""
@@ -355,12 +359,6 @@ class HerculesAdmin(object):
         if db_status['reason']:
             self.logger.info('Database status reason: %s' % db_status['reason'])
 
-
-    def setup_all(self):
-        """Read configuration information and set up the server configuration files to match."""
-        self.setup_database_connection()
-        self.setup_interserver()
-
     def setup_database_connection(self, hostname=None, username=None, password=None,
                                   database=None, port=None):
         """Set up the database configuration file.
@@ -375,7 +373,7 @@ class HerculesAdmin(object):
         field_mappings = {
             'db_hostname': hostname or self.args.db_hostname,
             'db_username': username or self.args.db_username,
-            'db_pass': password or self.args.db_password,
+            'db_password': password or self.args.db_password,
             'db_port': port or self.args.db_port,
             'db_database': database or self.args.db_database
         }
@@ -501,15 +499,15 @@ class HerculesAdmin(object):
                     # empty out current query after running the statement.
                     query = ''
 
-    def first_run(self):
-        """Set up database and interserver settings, run SQL upgrades, and start the server."""
+    def setup_all(self):
+        """Stop the servers if needed, set up database+interserver settings and run SQL upgrades."""
+        self.stop()
         self.setup_database_connection()
         self._wait_for_database()
         self.setup_interserver()
         self.sql_upgrades()
-        self.start()
 
-    def account(self, name, id=None, password=None, sex=None, admin=False):
+    def account(self, name, id=None, password=None, sex=None, gm=False):
         """Create or modify accounts on the server."""
         account_spec = {
             'userid': name
@@ -518,11 +516,17 @@ class HerculesAdmin(object):
         if sex or hasattr(self.args, 'sex'):
             account_spec['sex'] = sex or self.args.sex
         
-        if admin or hasattr(self.args, 'admin'):
+        if gm or hasattr(self.args, 'gm'):
             account_spec['group_id'] = 99
 
         if id:
             account_spec['account_id'] = id
+        
+        if password:
+            if self.config.get('login-server.conf', 'use_MD5_passwords') == 'true':
+                account_spec['password'] = md5(password)
+            else:
+                account_spec['password'] = password
 
         with self._database() as db:
             login_table = db['login']
