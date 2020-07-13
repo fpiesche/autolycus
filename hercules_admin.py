@@ -146,24 +146,21 @@ class HerculesAdmin(object):
                         'arch': 'unknown'}
 
         if not os.path.exists(self.version_info_file):
-            self.logger.warning('Failed to find version info file %s! Version info will be empty.'
-                                % self.version_info_file)
+            self.logger.warning(f'Failed to find {self.version_info_file}!')
             return version_info
 
         config = ConfigParser()
         config.read(self.version_info_file)
 
         if 'version_info' not in config.sections():
-            self.logger.warning('version_info section not found in %s! Version info will be empty.'
-                                % self.version_info_file)
+            self.logger.warning(f'version_info section not found in {self.version_info_file}')
             return version_info
 
         for info in version_info.keys():
             try:
                 version_info[info] = config['version_info'][info]
             except KeyError:
-                self.logger.warning('Failed to find entry %s in %s! Data will be empty.'
-                                    % (info, self.version_info_file))
+                self.logger.warning(f'Failed to find entry {info} in {self.version_info_file}!')
                 continue
 
         return version_info
@@ -176,7 +173,7 @@ class HerculesAdmin(object):
         Returns:
             int: The stored process ID for the server. None if no ID is stored.
         """
-        pid_file_path = os.path.join(self.hercules_path, '%s.pid' % server)
+        pid_file_path = os.path.join(self.hercules_path, f'{server}.pid')
         if os.path.exists(pid_file_path):
             with open(pid_file_path, 'r') as pidfile:
                 return int(pidfile.read())
@@ -189,8 +186,8 @@ class HerculesAdmin(object):
         Args:
             server_name (str): The server name to get the executable path for.
         """
-        return os.path.join(self.hercules_path, '%s%s' %
-                            (server_name, '.exe' if platform.system() == 'Windows' else ''))
+        ext = '.exe' if platform.system() == 'Windows' else ''
+        return os.path.join(self.hercules_path, f'{server_name}{ext}')
 
     def _get_status(self, server):
         """Get the status for the given server.
@@ -230,16 +227,14 @@ class HerculesAdmin(object):
                         matching_processes.append(proc.pid)
 
             if len(matching_processes) > 1:
-                self.logger.warn('Found multiple processes matching %s!',
-                                 'Status info may be unreliable.'
-                                 % server)
+                self.logger.warn(f'Found multiple processes matching {server}!')
                 return ('orphaned', matching_processes)
             elif len(matching_processes) == 1:
                 return ('orphaned', matching_processes[0])
             else:
                 return ('stopped', None)
 
-        raise AssertionError('Failed to find status for %s!' % server)
+        raise AssertionError(f'Failed to find status for {server}!')
 
     def _run_executable(self, server, force=False):
         """Run the specified server executable.
@@ -254,22 +249,23 @@ class HerculesAdmin(object):
         current_status, pid = self._get_status(server)
 
         if current_status == 'running' and not force:
-            self.logger.info('%s already running on pid %s, not starting another.' % (server, pid))
+            self.logger.info(f'{server} already running on pid {pid}, not starting another.')
             return
         elif current_status == 'orphaned' or (current_status == 'running' and force):
-            self.logger.info('%s %s on pid %s, killing...' % (server, current_status, pid))
+            self.logger.info(f'{server} {current_status} on pid {pid}, killing...')
             self._kill_server(server)
         elif current_status == 'missing':
-            self.logger.info('%s missing on pid %s, removing pidfile.' % (server, pid))
-            os.remove(os.path.join(self.hercules_path, '%s.pid' % server))
+            self.logger.info(f'{server} missing on pid {pid}, removing pidfile.')
+            os.remove(os.path.join(self.hercules_path, f'{server}.pid'))
 
         proc = psutil.Popen([self._server_executable(server)])
         if psutil.pid_exists(proc.pid):
-            with open(os.path.join(self.hercules_path, '%s.pid' % server), 'w') as pidfile:
+            with open(os.path.join(self.hercules_path, f'{server}.pid'), 'w') as pidfile:
                 print(proc.pid, file=pidfile)
-            self.logger.info('Started %s with pid %s.' % (server, proc.pid))
+            self.logger.info(f'Started {server} with pid {proc.pid}.')
         else:
-            raise OSError('Ran %s but failed to find process!' % self._server_executable(server))
+            exe = self._server_executable(server)
+            raise OSError(f'Ran {exe} but failed to find process!')
 
     def _kill_server(self, server):
         """Kill the specified server.
@@ -278,22 +274,21 @@ class HerculesAdmin(object):
             server (str): Which of the servers to kill.
         """
         server_status, server_pid = self._get_status(server)
-        pidfile = os.path.join(self.hercules_path, '%s.pid' % server)
+        pidfile = os.path.join(self.hercules_path, f'{server}.pid')
         if server_status in ['orphaned', 'running']:
-            self.logger.info('Asking %s (server_pid %s) to shut down.' % (server, server_pid))
+            self.logger.info(f'Asking {server} (pid {server_pid}) to shut down.')
             proc = psutil.Process(server_pid)
             proc.terminate()
             try:
                 proc.wait(timeout=10)
             except psutil.TimeoutExpired:
-                self.logger.warn(
-                    '%s failed to exit within 10 seconds, killing process!' % server)
+                self.logger.warn(f'{server} failed to exit within 10 seconds, killing process!')
                 proc.kill()
         else:
-            self.logger.info('%s is %s, no need to stop.' % (server, server_status))
+            self.logger.info(f'{server} is {server_status}, no need to stop.')
 
         if os.path.exists(pidfile):
-            self.logger.info('Removing pidfile for %s.' % (server))
+            self.logger.info(f'Removing pidfile for {server}.')
             os.remove(pidfile)
 
     @property
@@ -306,10 +301,9 @@ class HerculesAdmin(object):
     def _database(self):
         """Get a database connection object as a context handler."""
         db_config = self._database_config
-        db = dataset.connect('mysql://%s:%s@%s:%s/%s' %
-                             (db_config['db_username'], db_config['db_password'],
-                              db_config['db_hostname'], db_config['db_port'],
-                              db_config['db_database']))
+        db = dataset.connect(
+            'mysql://{db_username}:{db_password}@{db_hostname}:{db_port}/{db_database}'.format(
+                **db_config))
         return db
 
     def _database_status(self):
@@ -322,7 +316,7 @@ class HerculesAdmin(object):
             return {'ok': False, 'url': db.url, 'reason': str(exc).replace('\n', ' ')}
 
     def _wait_for_database(self, timeout=60):
-        self.logger.info('Waiting for database for up to %s seconds...' % timeout)
+        self.logger.info(f'Waiting for database for up to {timeout} seconds...')
         while timeout > 0:
             status = self._database_status()
             if status['ok']:
@@ -330,8 +324,8 @@ class HerculesAdmin(object):
             else:
                 timeout -= 1
                 sleep(1)
-        raise IOError('Database %s did not become available in time! Reason: %s' %
-                      (status['url'], status['reason']))
+        raise IOError(
+            'Database {url} did not become available in time! Reason: {reason}'.format(**status))
 
     def execute(self):
         try:
@@ -341,23 +335,19 @@ class HerculesAdmin(object):
 
     def info(self):
         """Print info on the Hercules server."""
-        self.logger.info('Hercules %s git version %s' %
-                         (self.version_info['arch'],
-                          self.version_info['git_version']))
-        self.logger.info('Packet version %s' %
-                         self.version_info['packet_version'])
-        self.logger.info('%s mode' %
-                         self.version_info['server_mode'])
-        self.logger.info('Build date %s' %
-                         self.version_info['build_date'])
+        self.logger.info(f'Hercules {arch} git version {git_version}'.format(**self.version_info))
+        self.logger.info(f'Packet version {self.version_info["packet_version"]}')
+        self.logger.info(f'{self.version_info["server_mode"]} mode')
+        self.logger.info(f'Build date {self.version_info["build_date"]}')
         for server in self.servers:
             status, pid = self._get_status(server)
-            self.logger.info('%s status: %s (pid: %s)' % (server, status, pid))
+            self.logger.info(f'{server} status: {status} (pid: {pid})')
         db_status = self._database_status()
-        self.logger.info('Database status: %s' % ('OK' if db_status['ok'] else 'Unavailable'))
-        self.logger.info('Database URL: %s' % db_status['url'])
+        status = 'OK' if db_status['ok'] else 'Unavailable'
+        self.logger.info(f'Database status: {status}')
+        self.logger.info(f'Database URL: {db_status["url"]}')
         if db_status['reason']:
-            self.logger.info('Database status reason: %s' % db_status['reason'])
+            self.logger.info(f'Database status reason: {db_status["reason"]}')
 
     def setup_database_connection(self, hostname=None, username=None, password=None,
                                   database=None, port=None):
@@ -377,9 +367,9 @@ class HerculesAdmin(object):
             'db_port': port or self.args.db_port,
             'db_database': database or self.args.db_database
         }
-        self.logger.info('Setting up database connection as %s.' % (field_mappings))
+        self.logger.info(f'Setting up database connection as {field_mappings}.')
         for setting, value in field_mappings.items():
-            if value and self.config.get('sql_connection.conf', setting) not in [value, '"%s"' % value]:
+            if value and self.config.get('sql_connection.conf', setting) not in [value, f'"{value}"']:
                 self.config.set('sql_connection.conf', setting, value)
 
     def setup_interserver(self, username=None, password=None):
@@ -395,11 +385,11 @@ class HerculesAdmin(object):
         }
 
         if field_mappings['userid'] or field_mappings['passwd']:
-            self.logger.info('Setting up interserver user %s with password %s.' % (username, password))
+            self.logger.info(f'Setting up interserver user {username} with password {password}.')
             self.account(id=1, name=field_mappings['userid'],
                         password=field_mappings['passwd'], sex='S')
             for config_file in ['char-server.conf', 'map-server.conf'], setting, value in field_mappings.items():
-                if value and self.config.get(config_file, setting) not in [value, '"%s"' % value]:
+                if value and self.config.get(config_file, setting) not in [value, f'"{value}"']:
                     self.config.set(config_file, setting, value)
         else:
             self.logger.info('No interserver user specified to set up, leaving defaults.')
@@ -412,7 +402,7 @@ class HerculesAdmin(object):
             try:
                 self._run_executable(server)
             except Exception as exc:
-                raise OSError('Failed to run %s! Reason: %s' % (server, exc))
+                raise OSError(f'Failed to run {server}! Reason: {exc}')
 
     def stop(self):
         """Stop the servers."""
@@ -433,18 +423,17 @@ class HerculesAdmin(object):
         """
         if self.version_info['build_date'] == 'unknown':
             if not force:
-                raise KeyError('Could not get build date from %s! SQL upgrades are unsafe.'
-                               % self.version_info_file +
-                               ' To apply SQL upgrades anyway, use the "force" flag.')
+                raise KeyError(f'Could not get build date from {self.version_info_file}! ' +
+                               'SQL upgrades are unsafe. To run them anyway, use the "force" flag.')
             else:
                 build_date = datetime.datetime.fromtimestamp(
                     os.path.getctime(self._server_executable('char-server')))
-                test.logger.warn('Failed to get build date from %s! SQL upgrades are unsafe.'
-                               % self.version_info_file)
+                char_server = self._server_executable('char-server')
+                test.logger.warn(f'Failed to get build date from {self.version_info_file}! ' +
+                                 'SQL upgrades are unsafe.')
                 test.logger.warn('sql_upgrades called with force argument, proceeding anyway.')
-                test.logger.warn('⚠️⚠️⚠️ THIS MAY BREAK YOUR DATABASE! ⚠️⚠️⚠️')
-                test.logger.warn('Assuming %s creation date %s as build date.' %
-                                 (self._server_executable('char-server'), build_date))
+                test.logger.warn('------- THIS MAY BREAK YOUR DATABASE! -------')
+                test.logger.warn(f'Assuming {char_server} creation date {build_date} as build date.')
         else:
             build_date = dateparser.parse(self.version_info['build_date'],
                                           date_formats=['%Y-%m-%d_%H-%M-%S'])
@@ -456,12 +445,12 @@ class HerculesAdmin(object):
             upgrade_date = dateparser.parse(os.path.splitext(os.path.basename(file_name))[0],
                                             date_formats=['%Y-%m-%d--%H-%M'])
             if upgrade_date is None:
-                self.logger.info('Failed to parse upgrade date for %s - ignoring file.' % file_name)
+                self.logger.info(f'Failed to parse upgrade date for {file_name} - ignoring file.')
                 continue
             elif upgrade_date > build_date:
                 self.import_sql(file_name)
             else:
-                self.logger.debug('%s is older than build, no need to import.' % file_name)
+                self.logger.debug(f'{file_name} is older than build, no need to import.')
 
     def import_sql(self, file_name):
         """Import an .sql file to the database
@@ -472,7 +461,7 @@ class HerculesAdmin(object):
         Raises:
             IOError: The database is unavailable.
         """
-        self.logger.info('Importing %s to database...' % file_name)
+        self.logger.info(f'Importing {file_name} to database...')
 
         if not self._database_status()['ok']:
             raise IOError('Database is unavailable; cannot import SQL file!')
@@ -486,7 +475,7 @@ class HerculesAdmin(object):
                     continue
 
                 # just add any non-comment lines to the query
-                query += '%s ' % line.strip()
+                query += line.strip() + ' '
 
                 # If the current line ends a command, run it
                 if line.strip().endswith(';'):
@@ -494,7 +483,7 @@ class HerculesAdmin(object):
                     try:
                         db.query(query)
                     except Exception as exc:
-                        self.logger.error('SQL statement error: %s' % exc)
+                        self.logger.error(f'SQL statement error: {exc}')
 
                     # empty out current query after running the statement.
                     query = ''
@@ -532,19 +521,17 @@ class HerculesAdmin(object):
             login_table = db['login']
             if not login_table.find(userid=name):
                 if 'user_pass' not in account_spec:
-                    raise KeyError('Account %s does not exist so a password is required!' % name)
+                    raise KeyError(f'Account {name} does not exist so a password is required!')
                 else:
                     login_table.insert(account_spec)
-                    self.logger.log('Account %s created with%s admin rights.' %
-                                    (name, 'out' if not admin else ''))
+                    self.logger.log(f'Account {name} created; GM rights: {gm}.')
             else:
                 if 'id' in account_spec:
                     key = 'id'
                 else:
                     key = 'userid'
                 login_table.update(account_spec, [key])
-                self.logger.log('Account %s updated to %s' %
-                                (name, account_spec))
+                self.logger.log(f'Account {name} updated to {account_spec}')
 
 
 if __name__ == '__main__':

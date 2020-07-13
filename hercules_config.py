@@ -44,7 +44,7 @@ class HerculesConfig(object):
                            if file_name not in matching_files]
 
         if not matching_files:
-            raise IOError('Failed to find any configuration files matching %s!' % file_name)
+            raise IOError(f'Failed to find any files matching {file_name} in {self.hercules_path}!')
 
         return matching_files
 
@@ -69,8 +69,8 @@ class HerculesConfig(object):
                 configuration = conffile.read()
             matches = re.search(r'\s*%s\s*:\s*(.*)' % setting, configuration)
             if len(matches.groups()) > 1:
-                self.logger.warning('Found multiple matches for %s: %s' % (setting, matches.groups()))
-                self.logger.warning('Will use first matching group %s.' % matches.groups[0])
+                self.logger.warning(f'Found multiple matches for {setting}: {matches.groups()}')
+                self.logger.warning(f'Will use first matching group {matches.groups()[0]}.')
             if matches.groups():
                 return matches.groups()[0]
 
@@ -78,15 +78,12 @@ class HerculesConfig(object):
         """Set the given value in the given configuration file.
 
         Args:
-            config_file ([type]): [description]
-            setting ([type]): [description]
-            value ([type]): [description]
-
-        Raises:
-            NotImplementedError: [description]
+            config_file (str): The basic file name of the configuration file to modify.
+            setting (str): The name of the option to set.
+            value (str): The new value for the option.
         """
         full_path = self._find_config_files(file_name)[0]
-        self.logger.debug('Setting %s in %s to %s.' % (setting, full_path, value))
+        self.logger.debug(f'{full_path}: Setting {setting}: {value}.')
         lines = []
         with open(full_path) as config_file:
             config = config_file.read()
@@ -97,23 +94,22 @@ class HerculesConfig(object):
         if not matches:
             # setting isn't currently in the file. Simply append it.
             out_lines = config_lines
-            out_lines.append('%s: %s' % (setting, value))
+            out_lines.append(f'{setting}: {value}')
         else:
             out_lines = []
             for line in config_lines:
                 matches = re.search(r'\s*%s\s*:\s*(.*)' % setting, line)
                 if matches:
                     if matches.groups()[0].startswith('"'):
-                        value = '"%s"' % value
+                        value = f'"{value}"'
                     new_line = re.sub(matches.groups()[0], value, line)
-                    self.logger.debug('Replacing %s with %s.' % (line, new_line))
+                    self.logger.debug(f'Replacing {line} with {new_line}.')
                     out_lines.append(new_line)
                 else:
                     out_lines.append(line)
 
         with open(full_path, 'w') as outfile:
             outfile.write(os.linesep.join(out_lines))
-
 
     def show_rate_messages(self, enabled):
         """Toggle XP/drop etc rate messages on login."""
