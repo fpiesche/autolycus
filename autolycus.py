@@ -21,12 +21,12 @@ from time import sleep
 from hercules_config import HerculesConfig
 from autolycus_logger import AutolycusFormatter
 
-class HerculesAdmin(object):
+class Autolycus(object):
 
     def __init__(self):
         self._parse_args()
 
-        self.logger = logging.getLogger('hercules')
+        self.logger = logging.getLogger('autolycus')
         self.logger.setLevel(logging.DEBUG)
 
         stdout_log = logging.StreamHandler(sys.stdout)
@@ -535,5 +535,5 @@ class HerculesAdmin(object):
 
 
 if __name__ == '__main__':
-    launcher = HerculesAdmin()
+    launcher = Autolycus()
     launcher.execute()

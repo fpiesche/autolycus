@@ -17,7 +17,7 @@ class HerculesConfig(object):
             hercules_path (str): The path to the Hercules installation to configure.
         """
         self.hercules_path = hercules_path
-        self.logger = logging.getLogger('hercules')
+        self.logger = logging.getLogger('autolycus')
 
     def _find_config_files(self, file_name):
         """Find any configuration files matching the file name.
