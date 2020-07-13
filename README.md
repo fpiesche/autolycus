@@ -18,4 +18,4 @@ feasibly the one person in Greece capable of wrestling Hercules.
 
 Also, I like [Bruce Campbell](https://hercules-xena.fandom.com/wiki/Autolycus), so once I stumbled on "Autolycus taught Hercules to wrestle" the decision came easy.
 
-<div align="center">![Bruce Campbell as Autolycus in Xena: Warrior Princess](https://github.com/fpiesche/autolycus/raw/master/autolycus.jpg)</div>
+<div align="center">![Bruce Campbell as Autolycus in Xena: Warrior Princess](https://github.com/fpiesche/autolycus/raw/master/autolycus.jpg "Bruce Campbell as Autolycus in Xena: Warrior Princess")</div>
