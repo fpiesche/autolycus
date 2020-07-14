@@ -388,9 +388,10 @@ class Autolycus(object):
             self.logger.info(f'Setting up interserver user {username} with password {password}.')
             self.account(id=1, name=field_mappings['userid'],
                         password=field_mappings['passwd'], sex='S')
-            for config_file in ['char-server.conf', 'map-server.conf'], setting, value in field_mappings.items():
-                if value and self.config.get(config_file, setting) not in [value, f'"{value}"']:
-                    self.config.set(config_file, setting, value)
+            for config_file in ['char-server.conf', 'map-server.conf']:
+                for setting, value in field_mappings.items():
+                    if value and self.config.get(config_file, setting) not in [value, f'"{value}"']:
+                        self.config.set(config_file, setting, value)
         else:
             self.logger.info('No interserver user specified to set up, leaving defaults.')
 
