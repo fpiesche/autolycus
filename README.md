@@ -1,7 +1,5 @@
 # Autolycus
-<div style="text-align: right; font-size: 1.2em; font-style: italic">
-  Admin tools for the Hercules Ragnarok Online server emulator
-</div>
+<p align="right"><i>Admin tools for the Hercules Ragnarok Online server emulator</i></div>
 
 Currently, Autolycus is a command-line Python utility that can run and stop your Hercules servers
 and perform various minor setup and maintenance tasks:
@@ -56,5 +54,6 @@ on the myth of Hercules. Autolycus was a robber who taught Hercules to wrestle, 
 feasibly the one person in Greece capable of wrestling Hercules.
 
 Also, I like [Bruce Campbell](https://hercules-xena.fandom.com/wiki/Autolycus), so once I stumbled on "Autolycus taught Hercules to wrestle" the decision came easy.
-
-<img align="center" src="https://github.com/fpiesche/autolycus/raw/master/autolycus.jpg" alt="Bruce Campbell as Autolycus in Xena: Warrior Princess" />
+<p align="center">
+<img src="https://github.com/fpiesche/autolycus/raw/master/autolycus.jpg" alt="Bruce Campbell as Autolycus in Xena: Warrior Princess" />
+</p>
