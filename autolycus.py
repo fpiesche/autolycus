@@ -386,8 +386,8 @@ class Autolycus(object):
 
         if field_mappings['userid'] or field_mappings['passwd']:
             self.logger.info(f'Setting up interserver user {field_mappings["userid"]}.')
-            self.account(id=1, name=field_mappings['userid'],
-                        password=field_mappings['passwd'], sex='S')
+            self.account(name=field_mappings['userid'],
+                        password=field_mappings['passwd'], sex='S', id=1)
             for config_file in ['char-server.conf', 'map-server.conf']:
                 for setting, value in field_mappings.items():
                     if value and self.config.get(config_file, setting) not in [value, f'"{value}"']:
@@ -497,7 +497,7 @@ class Autolycus(object):
         self.setup_interserver()
         self.sql_upgrades()
 
-    def account(self, name, id=None, password=None, sex=None, gm=False):
+    def account(self, name, password=None, sex=None, gm=False, id=None):
         """Create or modify accounts on the server."""
         account_spec = {
             'userid': name
@@ -520,15 +520,17 @@ class Autolycus(object):
 
         with self._database() as db:
             login_table = db['login']
-            if not login_table.find(userid=name):
+            # if the account id is specified we want to allow renaming the account
+            # so that the inter-server account can be renamed.
+            if 'account_id' not in account_spec and not login_table.find(userid=name):
                 if 'user_pass' not in account_spec:
                     raise KeyError(f'Account {name} does not exist so a password is required!')
                 else:
                     login_table.insert(account_spec)
                     self.logger.log(f'Account {name} created; GM rights: {gm}.')
             else:
-                if 'id' in account_spec:
-                    key = 'id'
+                if 'account_id' in account_spec:
+                    key = 'account_id'
                 else:
                     key = 'userid'
                 login_table.update(account_spec, [key])
