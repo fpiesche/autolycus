@@ -514,9 +514,9 @@ class Autolycus(object):
         
         if password:
             if self.config.get('login-server.conf', 'use_MD5_passwords') == 'true':
-                account_spec['password'] = md5(password)
+                account_spec['user_pass'] = md5(password)
             else:
-                account_spec['password'] = password
+                account_spec['user_pass'] = password
 
         with self._database() as db:
             login_table = db['login']
