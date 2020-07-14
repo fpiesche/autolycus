@@ -531,7 +531,7 @@ class Autolycus(object):
                 else:
                     key = 'userid'
                 login_table.update(account_spec, [key])
-                self.logger.log(f'Account {name} updated to {account_spec}')
+                self.logger.info(f'Account {name} updated to {account_spec}')
 
 
 if __name__ == '__main__':
