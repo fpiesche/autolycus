@@ -315,7 +315,7 @@ class Autolycus(object):
         except Exception as exc:
             return {'ok': False, 'url': db.url, 'reason': str(exc).replace('\n', ' ')}
 
-    def _wait_for_database(self, timeout=60):
+    def _wait_for_database(self, timeout=120):
         self.logger.info(f'Waiting for database for up to {timeout} seconds...')
         while timeout > 0:
             status = self._database_status()
@@ -334,8 +334,8 @@ class Autolycus(object):
         #     self.logger.error(f'Failed to execute {self.args.func}! Reason: {exc}')
 
     def info(self):
-        """Print info on the Hercules server."""
-        self.logger.info(f'Hercules {arch} git version {git_version}'.format(**self.version_info))
+        """Output info on the Hercules server."""
+        self.logger.info('Hercules {arch} git version {git_version}'.format(**self.version_info))
         self.logger.info(f'Packet version {self.version_info["packet_version"]}')
         self.logger.info(f'{self.version_info["server_mode"]} mode')
         self.logger.info(f'Build date {self.version_info["build_date"]}')
