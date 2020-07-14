@@ -385,7 +385,7 @@ class Autolycus(object):
         }
 
         if field_mappings['userid'] or field_mappings['passwd']:
-            self.logger.info(f'Setting up interserver user {username} with password {password}.')
+            self.logger.info(f'Setting up interserver user {field_mappings["userid"]}.')
             self.account(id=1, name=field_mappings['userid'],
                         password=field_mappings['passwd'], sex='S')
             for config_file in ['char-server.conf', 'map-server.conf']:
