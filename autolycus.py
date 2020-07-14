@@ -328,10 +328,10 @@ class Autolycus(object):
             'Database {url} did not become available in time! Reason: {reason}'.format(**status))
 
     def execute(self):
-        try:
-            self.args.func()
-        except Exception as exc:
-            self.logger.error(f'Failed to execute {self.args.func}! Reason: {exc}')
+        # try:
+        self.args.func()
+        # except Exception as exc:
+        #     self.logger.error(f'Failed to execute {self.args.func}! Reason: {exc}')
 
     def info(self):
         """Print info on the Hercules server."""
