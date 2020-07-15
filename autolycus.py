@@ -26,11 +26,13 @@ class Autolycus(object):
     def __init__(self):
         self._parse_args()
 
+        loglevel = logging.DEBUG if self.args.debug else logging.INFO
+
         self.logger = logging.getLogger('autolycus')
-        self.logger.setLevel(logging.DEBUG)
+        self.logger.setLevel(loglevel)
 
         stdout_log = logging.StreamHandler(sys.stdout)
-        stdout_log.setLevel(logging.DEBUG)
+        stdout_log.setLevel(loglevel)
         stdout_log.setFormatter(AutolycusFormatter())
         self.logger.addHandler(stdout_log)
 
@@ -51,8 +53,11 @@ class Autolycus(object):
                             help='The path containing the Hercules installation to control.')
         parser.add_argument('-r', '--autorestart', action='store_true',
                             help='Automatically restart servers when making configuration changes.')
+        parser.add_argument('--debug', action='store_true',
+                            help='Enable debug logging.')
 
-        subparsers = parser.add_subparsers(title='Available commands')
+        subparsers = parser.add_subparsers(
+            title='Available commands - use autolycus.py [command] -h for help with each command.')
 
         info = subparsers.add_parser('info',
                                      help='Output server status and version information and exit.')
