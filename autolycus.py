@@ -38,6 +38,7 @@ class Autolycus(object):
         self.logger.addHandler(stdout_log)
 
         self.servers = ['map-server', 'char-server', 'login-server']
+        self.date_format = '%Y-%m-%d_%H-%M-%S'
 
         self.hercules_config = HerculesConfig(self.hercules_path)
         self.autolycus_config = AutolycusConfig(self.hercules_path)
@@ -443,8 +444,11 @@ class Autolycus(object):
                 confidently determined.
         """
         try:
-            last_run_version = \
-                dateparser.parse(self.autolycus_config.installation_config('last_run_version'))
+            last_run_version = dateparser.parse(
+                self.autolycus_config.installation_config('last_run_version'),
+                date_formats=[self.date_format])
+            self.logger.debug(f'Read last run version {last_run_version} from ' +
+                              self.autolycus_config.installation_config_file)
         except Exception:
             self.logger.warn(
                 f'{self.autolycus_config.installation_config_file} has no last_run_version')
@@ -465,7 +469,7 @@ class Autolycus(object):
                 self.logger.warn(f'Using {char_server} creation date {build_date} as build date.')
         else:
             current_version = dateparser.parse(self.version_info['build_date'],
-                                               date_formats=['%Y-%m-%d_%H-%M-%S'])
+                                               date_formats=[self.date_format])
 
         upgrade_files = sorted(glob.glob(os.path.join(self.hercules_path, 'sql-files',
                                                       'upgrades', '*.sql')))
@@ -474,16 +478,19 @@ class Autolycus(object):
             upgrade_date = dateparser.parse(os.path.splitext(os.path.basename(file_name))[0],
                                             date_formats=['%Y-%m-%d--%H-%M'])
             if upgrade_date is None:
-                self.logger.info(f'Failed to parse upgrade date for {file_name} - ignoring file.')
+                self.logger.warn(f'Failed to parse upgrade date for {file_name} - ignoring file.')
                 continue
-            elif upgrade_date > last_run_version:
+            elif last_run_version is None or upgrade_date > last_run_version:
+                self.logger.debug(f'{file_name} has been added since last run, importing...')
                 self.import_sql(file_name)
             else:
                 self.logger.debug(f'{file_name} is older than last run Hercules, not importing.')
 
         # Update last_run_version config setting once all SQL upgrades have been applied
+        self.logger.debug('Updating last run version to %s' %
+                         current_version.strftime(self.date_format))
         self.autolycus_config.installation_config('last_run_version',
-                                                  current_version.strftime('%Y-%m-%d_%H-%M-%S'))
+                                                  current_version.strftime(self.date_format))
 
     def import_sql(self, file_name):
         """Import an .sql file to the database

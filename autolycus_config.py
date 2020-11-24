@@ -24,18 +24,22 @@ class AutolycusConfig(object):
         self._read_config()
 
     def _write_config(self, config_file, config_dict):
-        with open('w', config_file) as config:
+        with open(config_file, 'w') as config:
             config.write(json.dumps(config_dict))
 
     def _read_config(self):
         """Read global and installation config from files."""
         try:
+            if self._global_config is None:
+                self._global_config = {}
             with open(self.global_config_file) as global_file:
                 self._global_config.update(json.loads(global_file.read()))
         except IOError:
             self.logger.warn(f'Global config file {self.global_config_file} does not exist.')
             self._global_config = {}
         try:
+            if self._installation_config is None:
+                self._installation_config = {}
             with open(self.installation_config_file) as install_file:
                 self._installation_config.update(
                     json.loads(install_file.read()))
