@@ -488,7 +488,7 @@ class Autolycus(object):
 
         # Update last_run_version config setting once all SQL upgrades have been applied
         self.logger.debug('Updating last run version to %s' %
-                         current_version.strftime(self.date_format))
+                          current_version.strftime(self.date_format))
         self.autolycus_config.installation_config('last_run_version',
                                                   current_version.strftime(self.date_format))
 
