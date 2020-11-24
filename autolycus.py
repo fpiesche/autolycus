@@ -81,43 +81,54 @@ class Autolycus(object):
 
         setupall = subparsers.add_parser(
             'setup_all', help='Set up database and inter-server config and run SQL upgrades.')
-        setupall.add_argument('-dh', '--db_hostname', default='db',
+        setupall.add_argument('-dh', '--db_hostname',
+                              default=os.environ.get('MYSQL_HOST', 'db'),
                               help='The host name or IP address for the database server.')
-        setupall.add_argument('-du', '--db_username', default=os.environ.get('MYSQL_USER', ''),
+        setupall.add_argument('-du', '--db_username',
+                              default=os.environ.get('MYSQL_USER', 'ragnarok'),
                               help='The user name used to connect to the database server.')
-        setupall.add_argument('-dp', '--db_password',  default=os.environ.get('MYSQL_PASSWORD', ''),
+        setupall.add_argument('-dp', '--db_password',
+                              default=os.environ.get('MYSQL_PASSWORD', 'ragnarok'),
                               help='The password for the database user.')
-        setupall.add_argument('-dd', '--db_database',  default=os.environ.get('MYSQL_DATABASE', ''),
+        setupall.add_argument('-dd', '--db_database',
+                              default=os.environ.get('MYSQL_DATABASE', 'ragnarok'),
                               help='The database on the MySQL server to use.')
-        setupall.add_argument('--db_port',  default=os.environ.get('MYSQL_PORT', '3306'),
+        setupall.add_argument('--db_port',
+                              default=os.environ.get('MYSQL_PORT', '3306'),
                               help='The port used to reach the database server.')
         setupall.add_argument('-iu', '--is_username',
-                              default=os.environ.get('INTERSERVER_USER', ''),
+                              default=os.environ.get('INTERSERVER_USER', 'wisp'),
                               help='The user name used for servers to communicate.')
         setupall.add_argument('-ip', '--is_password', help='The password for inter-server user.',
-                              default=os.environ.get('INTERSERVER_PASSWORD', ''))
+                              default=os.environ.get('INTERSERVER_PASSWORD', 'wisp'))
         setupall.set_defaults(func=self.setup_all)
 
         dbsetup = subparsers.add_parser(
             'setup_db', help='Set up the database server configuration.')
-        dbsetup.add_argument('-dh', '--db_hostname', default='db',
+        dbsetup.add_argument('-dh', '--db_hostname',
+                             default=os.environ.get('MYSQL_HOST', 'db'),
                              help='The host name or IP address for the database server.')
-        dbsetup.add_argument('-du', '--db_username', default=os.environ.get('MYSQL_USER', ''),
+        dbsetup.add_argument('-du', '--db_username',
+                             default=os.environ.get('MYSQL_USER', 'ragnarok'),
                              help='The user name used to connect to the database server.')
-        dbsetup.add_argument('-dp', '--db_password',  default=os.environ.get('MYSQL_PASSWORD', ''),
+        dbsetup.add_argument('-dp', '--db_password',
+                             default=os.environ.get('MYSQL_PASSWORD', 'ragnarok'),
                              help='The password for the database user.')
-        dbsetup.add_argument('-dd', '--db_database',  default=os.environ.get('MYSQL_DATABASE', ''),
+        dbsetup.add_argument('-dd', '--db_database',
+                             default=os.environ.get('MYSQL_DATABASE', 'ragnarok'),
                              help='The database on the MySQL server to use.')
-        dbsetup.add_argument('--db_port',  default=os.environ.get('MYSQL_PORT', '3306'),
+        dbsetup.add_argument('--db_port',
+                             default=os.environ.get('MYSQL_PORT', '3306'),
                              help='The port used to reach the database server.')
         dbsetup.set_defaults(func=self.setup_database_connection)
 
         issetup = subparsers.add_parser(
             'setup_interserver', help='Set up the inter-server communications configuration.')
-        issetup.add_argument('-iu', '--is_username', default=os.environ.get('INTERSERVER_USER', ''),
+        issetup.add_argument('-iu', '--is_username',
+                             default=os.environ.get('INTERSERVER_USER', 'wisp'),
                              help='The user name used for servers to communicate.')
         issetup.add_argument('-ip', '--is_password', help='The password for inter-server user.',
-                             default=os.environ.get('INTERSERVER_PASSWORD', ''))
+                             default=os.environ.get('INTERSERVER_PASSWORD', 'wisp'))
         issetup.set_defaults(func=self.setup_interserver)
 
         account = subparsers.add_parser(
@@ -431,8 +442,13 @@ class Autolycus(object):
             force (boolean): Whether or not to apply SQL updates even if build date cannot be
                 confidently determined.
         """
-        last_run_version = \
-            dateparser.parse(self.autolycus_config.installation_config('last_run_version'))
+        try:
+            last_run_version = \
+                dateparser.parse(self.autolycus_config.installation_config('last_run_version'))
+        except Exception:
+            self.logger.warn(
+                f'{self.autolycus_config.installation_config_file} has no last_run_version')
+            last_run_version = datetime.datetime.fromtimestamp(0)
         current_version = self.version_info['build_date']
 
         if current_version == 'unknown':

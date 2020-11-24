@@ -28,22 +28,24 @@ class AutolycusConfig(object):
             config.write(json.dumps(config_dict))
 
     def _read_config(self):
-        """Read global and installation config from files."""        
+        """Read global and installation config from files."""
         try:
             with open(self.global_config_file) as global_file:
                 self._global_config.update(json.loads(global_file.read()))
         except IOError:
-            self.logger.info(f'Global config file {self.global_config_file} does not exist.')
+            self.logger.warn(f'Global config file {self.global_config_file} does not exist.')
+            self._global_config = {}
         try:
             with open(self.installation_config_file) as install_file:
                 self._installation_config.update(
                     json.loads(install_file.read()))
         except IOError:
-            self.logger.info(f'Install config file {self.installation_config_file} does not exist.')
+            self.logger.warn(f'Install config file {self.installation_config_file} does not exist.')
+            self._installation_config = {}
 
     def global_config(self, key, value=None):
         """Read or write a value from the global Autolycus configuration.
-        
+
         Will automatically update the configuration file on disk when setting a value.
 
         Args:
@@ -52,17 +54,17 @@ class AutolycusConfig(object):
 
         Returns:
             str: The value of the configuration option given.
-        """        
+        """
         if self._global_config is None:
             self._read_config()
         if value is not None:
             self._global_config[key] = value
             self.write_config(self.global_config_file, self._global_config)
-        return self._global_config[key]
+        return self._global_config.get(key, None)
 
     def installation_config(self, key, value=None):
         """Read or write a value from the installation configuration.
-        
+
         Will automatically update the configuration file on disk when setting a value.
 
         Args:
@@ -71,10 +73,10 @@ class AutolycusConfig(object):
 
         Returns:
             str: The value of the configuration option given.
-        """        
+        """
         if self._installation_config is None:
             self._read_config()
         if value is not None:
             self._installation_config[key] = value
             self.write_config(self.installation_config_file, self._installation_config)
-        return self._installation_config[key]
+        return self._installation_config.get(key, None)
