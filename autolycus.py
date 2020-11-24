@@ -468,7 +468,7 @@ class Autolycus(object):
         self.autolycus_config.installation_config('last_run_version',
                                                   current_version.strftime('%Y-%m-%d_%H-%M-%S'))
 
-        def import_sql(self, file_name):
+    def import_sql(self, file_name):
         """Import an .sql file to the database
 
         Args:
