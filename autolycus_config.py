@@ -59,7 +59,7 @@ class AutolycusConfig(object):
             self._read_config()
         if value is not None:
             self._global_config[key] = value
-            self.write_config(self.global_config_file, self._global_config)
+            self._write_config(self.global_config_file, self._global_config)
         return self._global_config.get(key, None)
 
     def installation_config(self, key, value=None):
@@ -78,5 +78,5 @@ class AutolycusConfig(object):
             self._read_config()
         if value is not None:
             self._installation_config[key] = value
-            self.write_config(self.installation_config_file, self._installation_config)
+            self._write_config(self.installation_config_file, self._installation_config)
         return self._installation_config.get(key, None)
