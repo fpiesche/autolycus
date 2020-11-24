@@ -14,13 +14,13 @@ import os
 import platform
 import psutil
 from random import choice
-import re
 import sys
 from time import sleep
 
 from hercules_config import HerculesConfig
 from autolycus_config import AutolycusConfig
 from autolycus_logger import AutolycusFormatter
+
 
 class Autolycus(object):
 
@@ -40,7 +40,7 @@ class Autolycus(object):
         self.servers = ['map-server', 'char-server', 'login-server']
 
         self.hercules_config = HerculesConfig(self.hercules_path)
-        self.config = AutolycusConfig(self.hercules_path)
+        self.autolycus_config = AutolycusConfig(self.hercules_path)
 
         self.version_info_file = os.path.join(
             self.hercules_path, 'version_info.ini')
@@ -91,7 +91,8 @@ class Autolycus(object):
                               help='The database on the MySQL server to use.')
         setupall.add_argument('--db_port',  default=os.environ.get('MYSQL_PORT', '3306'),
                               help='The port used to reach the database server.')
-        setupall.add_argument('-iu', '--is_username', default=os.environ.get('INTERSERVER_USER', ''),
+        setupall.add_argument('-iu', '--is_username',
+                              default=os.environ.get('INTERSERVER_USER', ''),
                               help='The user name used for servers to communicate.')
         setupall.add_argument('-ip', '--is_password', help='The password for inter-server user.',
                               default=os.environ.get('INTERSERVER_PASSWORD', ''))
@@ -376,7 +377,8 @@ class Autolycus(object):
         }
         self.logger.info(f'Setting up database connection as {field_mappings}.')
         for setting, value in field_mappings.items():
-            if value and self.hercules_config.get('sql_connection.conf', setting) not in [value, f'"{value}"']:
+            if value and self.hercules_config.get('sql_connection.conf', setting) \
+                    not in [value, f'"{value}"']:
                 self.hercules_config.set('sql_connection.conf', setting, value)
 
     def setup_interserver(self, username=None, password=None):
@@ -394,14 +396,14 @@ class Autolycus(object):
         if field_mappings['userid'] or field_mappings['passwd']:
             self.logger.info(f'Setting up interserver user {field_mappings["userid"]}.')
             self.account(name=field_mappings['userid'],
-                        password=field_mappings['passwd'], sex='S', id=1)
+                         password=field_mappings['passwd'], sex='S', id=1)
             for config_file in ['char-server.conf', 'map-server.conf']:
                 for setting, value in field_mappings.items():
-                    if value and self.hercules_config.get(config_file, setting) not in [value, f'"{value}"']:
+                    if value and self.hercules_config.get(config_file, setting) \
+                            not in [value, f'"{value}"']:
                         self.hercules_config.set(config_file, setting, value)
         else:
             self.logger.info('No interserver user specified to set up, leaving defaults.')
-
 
     def start(self):
         """Start the servers."""
@@ -424,7 +426,7 @@ class Autolycus(object):
 
     def sql_upgrades(self, force=False):
         """Determine whether any SQL upgrades need to be run and do so if appropriate.
-        
+
         Args:
             force (boolean): Whether or not to apply SQL updates even if build date cannot be
                 confidently determined.
@@ -438,17 +440,16 @@ class Autolycus(object):
                 raise KeyError(f'Could not get build date from {self.version_info_file}! ' +
                                'SQL upgrades are unsafe. To run them anyway, use the "force" flag.')
             else:
-                current_version = datetime.datetime.fromtimestamp(
-                    os.path.getctime(self._server_executable('char-server')))
                 char_server = self._server_executable('char-server')
-                test.logger.warn(f'Failed to get build date from {self.version_info_file}! ' +
+                build_date = datetime.datetime.fromtimestamp(os.path.getctime(char_server))
+                self.logger.warn(f'Failed to get build date from {self.version_info_file}! ' +
                                  'SQL upgrades are unsafe.')
-                test.logger.warn('sql_upgrades called with force argument, proceeding anyway.')
-                test.logger.warn('------- THIS MAY BREAK YOUR DATABASE! -------')
-                test.logger.warn(f'Assuming {char_server} creation date {build_date} as build date.')
+                self.logger.warn('sql_upgrades called with force argument, proceeding anyway.')
+                self.logger.warn('------- THIS MAY BREAK YOUR DATABASE! -------')
+                self.logger.warn(f'Using {char_server} creation date {build_date} as build date.')
         else:
             current_version = dateparser.parse(self.version_info['build_date'],
-                                          date_formats=['%Y-%m-%d_%H-%M-%S'])
+                                               date_formats=['%Y-%m-%d_%H-%M-%S'])
 
         upgrade_files = sorted(glob.glob(os.path.join(self.hercules_path, 'sql-files',
                                                       'upgrades', '*.sql')))
@@ -463,7 +464,7 @@ class Autolycus(object):
                 self.import_sql(file_name)
             else:
                 self.logger.debug(f'{file_name} is older than last run Hercules, not importing.')
-        
+
         # Update last_run_version config setting once all SQL upgrades have been applied
         self.autolycus_config.installation_config('last_run_version',
                                                   current_version.strftime('%Y-%m-%d_%H-%M-%S'))
@@ -473,7 +474,7 @@ class Autolycus(object):
 
         Args:
             file_name (str): The full path to the .sql file to import.
-        
+
         Raises:
             IOError: The database is unavailable.
         """
@@ -520,13 +521,13 @@ class Autolycus(object):
 
         if sex or hasattr(self.args, 'sex'):
             account_spec['sex'] = sex or self.args.sex
-        
+
         if gm or hasattr(self.args, 'gm'):
             account_spec['group_id'] = 99
 
         if id:
             account_spec['account_id'] = id
-        
+
         if password:
             if self.hercules_config.get('login-server.conf', 'use_MD5_passwords') == 'true':
                 account_spec['user_pass'] = md5(password)
