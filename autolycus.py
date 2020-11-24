@@ -429,7 +429,7 @@ class Autolycus(object):
             force (boolean): Whether or not to apply SQL updates even if build date cannot be
                 confidently determined.
         """
-        last_run_version =
+        last_run_version = \
             dateparser.parse(self.autolycus_config.installation_config('last_run_version'))
         current_version = self.version_info['build_date']
 
